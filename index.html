@@ -4,12 +4,17 @@ import { CheckCircle, AlertCircle, Award, ClipboardList, User, RefreshCcw, Datab
 // === FIREBASE SETUP ===
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, addDoc, getDoc, updateDoc, deleteDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// === SAFE FIREBASE INITIALIZATION & FALLBACK ===
+// ແກ້ໄຂບັນຫາໜ້າຈໍຂາວ / ແອັບພລິເຄຊັນ Crash ຢ່າງຖາວອນ ຫາກບໍ່ມີການສົ່ງຄ່າ __firebase_config ມາໃຫ້
+const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
+  ? (typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config) 
+  : null;
+
+const app = firebaseConfig && firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'lmg-assessment-app';
 
 // ==========================================
@@ -84,7 +89,7 @@ const choices = {
   ],
   aligna: [
     { name: 'a', label: 'A. ຄຸນນະພາບຂອງອາກາດ' },
-    { name: 'b', label: 'B. ການປະຕິບັດທີ່ຜູ້ບໍລິຫານສາມາດເຮັດເພື່ອປັບປຸງການເຮັດວຽກຂອງທີມ' },
+    { name: 'b', label: 'B.  ການປະຕິບັດທີ່ຜູ້ບໍລິຫານສາມາດເຮັດເພື່ອປັບປຸງການເຮັດວຽກຂອງທີມ' },
     { name: 'c', label: 'C. ວິທີການຈັດຄວາມເປັນລະບຽບໃນຫ້ອງການ' }
   ],
   alignb: [
@@ -104,12 +109,12 @@ const choices = {
     { name: 'c', label: 'C. ເວົ້າຂວັນ' }
   ],
   inspireb: [
-    { name: 'a', label: 'A. ການຈັດລະບຽບຫ້ອງການ' },
+    { name: 'a', label: 'A. การຈັດລະບຽບຫ້ອງການ' },
     { name: 'b', label: 'B. ລົມໂທລະສັບ' },
     { name: 'c', label: 'C. ມີການເຮັດວຽກເປັນທີມທີ່ດີ' }
   ],
   inspirec: [
-    { name: 'a', label: 'A. ຖາມຄໍາຖາມ และ ຟັງ' },
+    { name: 'a', label: 'A. ຖາມຄໍາຖາມ ແລະ ຟັງ' },
     { name: 'b', label: 'B. ລົບກວນຖ້າມີຄົນກໍາລັງເວົ້າ' },
     { name: 'c', label: 'C. ຕຶງຄຽດ ຫຼື ໃຈຮ້າຍ' }
   ],
@@ -144,7 +149,7 @@ const surveyStructure = [
   },
   {
     id: 'focus',
-    title: 'II. การສຸມໃສ່',
+    title: 'II. ການສຸມໃສ່',
     icon: <Target className="w-5 h-5 text-purple-500" />,
     questions: [
       { name: 'focus1', type: 'select_one', label: '1. ເຈົ້າຄວນໃຊ້ເວລາສ່ວນໃຫ່ຍ ໃນການເຮັດວຽກທີ່:', choices: 'focus1_opts', required: true },
@@ -169,7 +174,7 @@ const surveyStructure = [
     questions: [
       { name: 'inspire1', type: 'select_one', label: '1. ການປະຕິບັດກ່ຽວກັບການບໍລິຫານທີ່ສໍາຄັນອັນໃດ ທີ່ຈະເພີ່ມຄວາມໄວ້ວາງໃຈ?', choices: 'inspirea', required: true },
       { name: 'inspire2', type: 'select_one', label: '2. ການສ້າງຄວາມໄວ້ວາງໃຈແມ່ນສໍາຄັນ ສໍາຫຼັບ?', choices: 'inspireb', required: true },
-      { name: 'inspire3', type: 'select_one', label: '3. ເտັກນິກການສື່ສານທີ່ດີແມ່ນຫຍັງ?', choices: 'inspirec', required: true }
+      { name: 'inspire3', type: 'select_one', label: '3. ເຕັກນິກການສື່ສານທີ່ດີແມ່ນຫຍັງ?', choices: 'inspirec', required: true }
     ]
   },
   {
@@ -270,6 +275,11 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => {
+      if (!auth) {
+        // ໂໝດ Demo ຖ້າບໍ່ມີການຕັ້ງຄ່າ Firebase (ປ້ອງກັນແອັບພລິເຄຊັນ Crash ຢ່າງຖາວອນ)
+        setUser({ uid: 'demo-user', isAnonymous: true });
+        return;
+      }
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
@@ -282,13 +292,26 @@ export default function App() {
     };
     initAuth();
     
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
+    if (auth) {
+      const unsubscribe = onAuthStateChanged(auth, setUser);
+      return () => unsubscribe();
+    }
   }, []);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
     
+    if (!db) {
+      // ກຽມຂໍ້ມູນທົດລອງໃນໂໝດ Demo ເພື່ອສະແດງຜົນກຣາຟ ແລະ ຕາຕະລາງ
+      if (submissions.length === 0) {
+        setSubmissions([
+          { id: 'demo-1', _101: 'LMG-001', _102: '2026-06-26', _103: '13', _104: '1314', _105: 'ພະແນກສາທາ', assessment_time: 'pre', score: 4, maxScore: 10, timestamp: { toMillis: () => Date.now() - 3600000 } },
+          { id: 'demo-2', _101: 'LMG-001', _102: '2026-06-26', _103: '13', _104: '1314', _105: 'ພະແນກສາທາ', assessment_time: 'post', score: 8, maxScore: 10, timestamp: { toMillis: () => Date.now() } }
+        ]);
+      }
+      return;
+    }
+
     const submissionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'assessments');
     const q = query(submissionsRef); 
 
@@ -329,7 +352,7 @@ export default function App() {
 
   // --- Generate New Form Logic ---
   const handleGenerateNewForm = () => {
-    const promptText = `ຊ່ວຍສ້າງແອັບປະເມີນຜົນໃໝ່ໃຫ້ຂ້ອຍແດ່ ໂດຍໃຊ້ໂຄງສ້າງ ແລະ UI ແບບດຽວກັນກັບແອັບປັດຈຸບັນ (ມີ 2 ໜ້າຈໍ ຊ້າຍ-ຂວາ, ມີລະບົບ Admin, ມີກຣາຟ Real-time), ແຕ່ປ່ຽນຂໍ້ມູນແບບສອບຖາມໃໝ່ຕາມນີ້:\n\n${newFormText}`;
+    const promptText = `ຊ່ວຍສ້າງແອັບປະເມີນຜົນໃໝ່ໃຫ້ຂ້ອຍແດ່ ໂດຍໃຊ້ໂຄງສ້າງ ແລະ UI ແບບດຽວກັນກັບແອັບປັດຈຸບັນ (ມີ 2 ໜ້າຈໍ ຊ້າຍ-ວາ, ມີລະບົບ Admin, ມີກຣາຟ Real-time), ແຕ່ປ່ຽນຂໍ້ມູນແບບສອບຖາມໃໝ່ຕາມນີ້:\n\n${newFormText}`;
 
     const textArea = document.createElement("textarea");
     textArea.value = promptText;
@@ -370,6 +393,11 @@ export default function App() {
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
+    if (!db) {
+      setSubmissions(prev => prev.filter(s => s.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessments', deleteConfirmId));
       setDeleteConfirmId(null);
@@ -431,17 +459,35 @@ export default function App() {
     const finalScore = calculateScore();
     setRecentScore({ total: finalScore, max: maxTotalScore });
 
-    try {
-      const dataToSave = {
-        ...formData,
-        score: finalScore,
-        maxScore: maxTotalScore,
-        percentage: Math.round((finalScore / maxTotalScore) * 100),
-        timestamp: editId ? formData.timestamp : serverTimestamp(),
-        updatedAt: editId ? serverTimestamp() : null, 
-        userId: formData.userId || user.uid 
-      };
+    const dataToSave = {
+      ...formData,
+      score: finalScore,
+      maxScore: maxTotalScore,
+      percentage: Math.round((finalScore / maxTotalScore) * 100),
+      timestamp: editId ? formData.timestamp : (db ? serverTimestamp() : Date.now()),
+      updatedAt: editId ? (db ? serverTimestamp() : Date.now()) : null, 
+      userId: formData.userId || user.uid 
+    };
 
+    if (!db) {
+      // ບັນທຶກແບບທ້ອງຖິ່ນໃນໂໝດທົດລອງ
+      if (editId) {
+        setSubmissions(prev => prev.map(s => s.id === editId ? { ...dataToSave, id: editId } : s));
+      } else {
+        const newDoc = { ...dataToSave, id: 'local-' + Math.random().toString(36).substr(2, 9) };
+        setSubmissions(prev => [...prev, newDoc]);
+      }
+      setShowResultForm(true);
+      setIsSubmitting(false);
+      if (isAdmin) {
+        document.getElementById('left-pane').scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    try {
       if (editId) {
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'assessments', editId);
         await updateDoc(docRef, dataToSave);
@@ -509,6 +555,8 @@ export default function App() {
         time = sub.timestamp.toMillis();
     } else if (sub.timestamp && sub.timestamp.seconds) {
         time = sub.timestamp.seconds * 1000;
+    } else if (typeof sub.timestamp === 'number') {
+        time = sub.timestamp;
     }
     if (time > acc[code].latestTime) acc[code].latestTime = time;
     
@@ -525,6 +573,14 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
+
+      {/* ແຖບແຈ້ງເຕືອນໂໝດ Demo ເມື່ອບໍ່ມີການເຊື່ອມຕໍ່ Firebase */}
+      {!db && (
+        <div className="bg-yellow-500 text-white text-center py-2 px-4 text-sm font-bold shadow-md print:hidden flex items-center justify-center gap-2 font-noto">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>ໂໝດທົດລອງລະດັບທ້ອງຖິ່ນ (Local Demo Mode) — ຂໍ້ມູນຈະຖືກເກັບຊົ່ວຄາວໃນບຣາວເຊີເທົ່ານັ້ນ</span>
+        </div>
+      )}
 
       {/* --- Admin Login Modal --- */}
       {showAdminLogin && (
@@ -815,7 +871,7 @@ export default function App() {
               {/* Data Table with Edit/Delete Actions */}
               <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-8">
                 <div className="p-4 bg-gray-50 border-b border-gray-200">
-                  <h3 className="text-sm font-bold text-gray-700 flex items-center"><List className="w-4 h-4 mr-1.5" /> ລາຍການຂໍ້ມູນທັງໝົດ (All Records)</h3>
+                  <h3 className="text-sm font-bold text-gray-700 flex items-center"><i className="ph-bold ph-list text-[16px] mr-1.5"></i> ລາຍການຂໍ້ມູນທັງໝົດ (All Records)</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-[600px]">
@@ -859,17 +915,17 @@ export default function App() {
                                 {group.pre && (
                                   <div className="flex items-center gap-1">
                                     <span className="text-[9px] text-[#35675D] font-bold mr-1">PRE:</span>
-                                    <button onClick={() => { setSelectedSubmission(group.pre); setIsChartFullscreen(false); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="ເບິ່ງລາຍລະອຽດ Pre-test"><Eye className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => handleEditClick(group.pre)} className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors" title="ແກ້ໄຂ Pre-test"><Edit className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => requestDelete(group.pre.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" title="ລຶບ Pre-test"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => { setSelectedSubmission(group.pre); setIsChartFullscreen(false); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="ເບິ່ງລາຍລະອຽດ Pre-test"><i className="ph-bold ph-eye text-[16px]"></i></button>
+                                    <button onClick={() => handleEditClick(group.pre)} className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors" title="ແກ້ໄຂ Pre-test"><i className="ph-bold ph-pencil-simple text-[16px]"></i></button>
+                                    <button onClick={() => requestDelete(group.pre.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" title="ລຶບ Pre-test"><i className="ph-bold ph-trash text-[16px]"></i></button>
                                   </div>
                                 )}
                                 {group.post && (
                                   <div className="flex items-center gap-1">
                                     <span className="text-[9px] text-[#BF5A38] font-bold mr-1">POST:</span>
-                                    <button onClick={() => { setSelectedSubmission(group.post); setIsChartFullscreen(false); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="ເບິ່ງລາຍລະອຽດ Post-test"><Eye className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => handleEditClick(group.post)} className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors" title="ແກ້ໄຂ Post-test"><Edit className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => requestDelete(group.post.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" title="ລຶບ Post-test"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => { setSelectedSubmission(group.post); setIsChartFullscreen(false); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="ເບິ່ງລາຍລະອຽດ Post-test"><i className="ph-bold ph-eye text-[16px]"></i></button>
+                                    <button onClick={() => handleEditClick(group.post)} className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors" title="ແກ້ໄຂ Post-test"><i className="ph-bold ph-pencil-simple text-[16px]"></i></button>
+                                    <button onClick={() => requestDelete(group.post.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" title="ລຶບ Post-test"><i className="ph-bold ph-trash text-[16px]"></i></button>
                                   </div>
                                 )}
                               </div>
@@ -892,8 +948,8 @@ export default function App() {
       {selectedSubmission && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] font-noto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl relative">
-            <button onClick={() => setSelectedSubmission(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><X className="w-5 h-5" /></button>
-            <h2 className="text-xl font-bold mb-4 flex items-center"><User className="w-6 h-6 mr-2 text-blue-600" /> ຂໍ້ມູນລາຍບຸກຄົນ</h2>
+            <button onClick={() => setSelectedSubmission(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><i className="ph-bold ph-x text-[20px]"></i></button>
+            <h2 className="text-xl font-bold mb-4 flex items-center"><i className="ph-fill ph-user text-[24px] mr-2 text-blue-600"></i> ຂໍ້ມູນລາຍບຸກຄົນ</h2>
             <div className="space-y-3">
               <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ລະຫັດ:</span> <strong className="font-sans">{selectedSubmission._101}</strong></p>
               <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ການປະເມີນ:</span> <strong>{selectedSubmission.assessment_time === 'pre' ? 'Pre-test' : 'Post-test'}</strong></p>
@@ -906,7 +962,7 @@ export default function App() {
               </div>
             </div>
             <button onClick={() => { handleEditClick(selectedSubmission); setSelectedSubmission(null); }} className="w-full mt-4 py-3 bg-yellow-500 text-white font-bold rounded-xl hover:bg-yellow-600 transition-colors flex justify-center items-center">
-              <Edit className="w-5 h-5 mr-2" /> ແກ້ໄຂຂໍ້ມູນນີ້ (Edit)
+              <i className="ph-bold ph-pencil-simple text-[20px] mr-2"></i> ແກ້ໄຂຂໍ້ມູນນີ້ (Edit)
             </button>
           </div>
         </div>
