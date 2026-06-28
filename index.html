@@ -15,6 +15,17 @@
     <!-- ໂຫຼດ Babel Standalone (ລຸ້ນສະຖຽນ 7.18.0) -->
     <script src="https://unpkg.com/@babel/standalone@7.18.0/babel.min.js"></script>
 
+    <!-- ໂຫຼດຫ້ອງສະໝຸດສຳລັບ ສົ່ງອອກ Excel (.xlsx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- ໂຫຼດຫ້ອງສະໝຸດສຳລັບ ສົ່ງອອກ PDF (.pdf) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- ໂຫຼດ Firebase Compat (UMD version ທີ່ບໍ່ຕ້ອງການຄຳສັ່ງ import) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&display=swap');
         body { font-family: 'Noto Sans Lao', 'Noto Sans', sans-serif; }
@@ -27,12 +38,11 @@
 </head>
 <body class="bg-gray-100 font-noto">
     
-    <!-- ພື້ນທີ່ສະແດງຜົນຫຼັກຂອງແອັບ React -->
     <div id="root"></div>
 
     <script>
-      // ບັງຄັບໃຫ້ Babel standalone ນຳໃຊ້ classic runtime ຜ່ານ Custom Preset
-      // ສິ່ງນີ້ຈະແກ້ໄຂ Error ເລື່ອງ Failed to resolve module specifier "react/jsx-runtime" ໄດ້ 100% ຢ່າງຖາວອນ
+      // ກຳນົດໃຫ້ Babel ໃຊ້ງານໃນໂໝດ Classic JSX Runtime ໂດຍກົງ
+      // ວິທີນີ້ຈະແກ້ໄຂ Error ເລື່ອງ Failed to resolve module specifier "react/jsx-runtime" ໄດ້ 100%
       Babel.registerPreset('custom-react', {
         presets: [
           [Babel.availablePresets['react'], { runtime: 'classic' }],
@@ -41,12 +51,75 @@
       });
     </script>
 
-    <!-- ໃຊ້ Custom Preset ທີ່ລົງທະບຽນໄວ້ດ້ານເທິງ ແລະ ເອົາຄຳສັ່ງ import/export ອອກທັງໝົດ -->
+    <!-- ໃຊ້ Custom Preset ທີ່ລົງທະບຽນໄວ້ ແລະ ບໍ່ມີຄຳສັ່ງ import ໃດໆຢູ່ໃນນີ້ -->
     <script type="text/babel" data-presets="custom-react">
         const { useState, useEffect } = React;
 
+        // =========================================================================
+        // [ຂັ້ນຕອນສຳຄັນ] ປ່ຽນຄ່າຄອນຟິກ FIREBASE ຂອງທ່ານຢູ່ບ່ອນນີ້ ເພື່ອໃຫ້ບັນທຶກຂໍ້ມູນຖາວອນຂ້າມເຄື່ອງໄດ້ແທ້:
+        // (ຫາກຄ່າ apiKey ຍັງເປັນ "YOUR_API_KEY", ລະບົບຈະແລ່ນໃນໂໝດ LocalStorage ໃນເຄື່ອງໃຜເຄື່ອງມັນໂດຍອັດຕະໂນມັດ)
+        // =========================================================================
+        const customFirebaseConfig = {
+            apiKey: "YOUR_API_KEY",                  
+            authDomain: "YOUR_AUTH_DOMAIN",          
+            projectId: "YOUR_PROJECT_ID",            
+            storageBucket: "YOUR_STORAGE_BUCKET",    
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID", 
+            appId: "YOUR_APP_ID"                     
+        };
+        // =========================================================================
+
+        // === FIREBASE SETUP & GRACEFUL FALLBACK (ປ້ອງກັນໜ້າຈໍຂາວແບບປອດໄພ) ===
+        let firebaseConfig = null;
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try {
+                firebaseConfig = typeof __firebase_config === 'string' 
+                    ? JSON.parse(__firebase_config) 
+                    : __firebase_config;
+            } catch (e) {
+                console.error("Failed to parse firebase config:", e);
+            }
+        }
+
+        // ຫາກບໍ່ມີ config ຈາກ Canvas, ແຕ່ຜູ້ໃຊ້ມີການຕັ້ງຄ່າ customFirebaseConfig ໄວ້
+        if (!firebaseConfig && customFirebaseConfig && customFirebaseConfig.apiKey !== "YOUR_API_KEY") {
+            firebaseConfig = customFirebaseConfig;
+        }
+
+        const isFirebaseConfigured = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+
+        let auth = null;
+        let db = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'lmg-assessment-app';
+
+        if (isFirebaseConfigured) {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                auth = firebase.auth();
+                db = firebase.firestore();
+                
+                // ແກ້ໄຂບັນຫາການຂັດແຍ້ງການຕັ້ງຄ່າ Long Polling ໂດຍໃຊ້ Auto Detect ແທນ
+                db.settings({ experimentalAutoDetectLongPolling: true });
+
+                // ປິດການໃຊ້ງານ Persistence ຖ້າຫາກວ່າພົບປັນຫາເລື່ອງການເຊື່ອມຕໍ່ຊ້າ ເພື່ອຫຼຸດຜ່ອນຂໍ້ຜິດພາດ
+                try {
+                    db.enablePersistence().catch(function(err) {
+                        // ງຽບການແຈ້ງເຕືອນ Offline Persistence ໄວ້ ເພື່ອບໍ່ໃຫ້ລົບກວນ Console
+                    });
+                } catch(e) {}
+                
+                console.log("Firebase initialized successfully. Running in Cloud Saving Mode.");
+            } catch (e) {
+                console.error("Firebase initialization failed:", e);
+            }
+        } else {
+            console.log("No Firebase config detected. Running in Local Saving Mode.");
+        }
+
         // ==========================================
-        // ຄຳຕອບທີ່ຖືກຕ້ອງ (Correct Answer Key) - ປະກາດໄວ້ເທິງສຸດຂອງໂປຣແກຣມ
+        // ຄຳຕອບທີ່ຖືກຕ້ອງ (Correct Answer Key)
         // ==========================================
         const correctAnswers = {
           focus1: 'b', focus2: 'd', focus3: 'a', // Focus: 3 ຂໍ້
@@ -59,6 +132,10 @@
         // ຂໍ້ມູນຕົວແປຕົວເລືອກ (Choices)
         // ==========================================
         const choices = {
+          gender: [
+            { name: 'm', label: 'ຊາຍ' },
+            { name: 'f', label: 'ຍິງ' }
+          ],
           province: [
             { name: '01', label: 'ນະຄອນຫຼວງວຽງຈັນ' },
             { name: '02', label: 'ຜົ້ງສາລີ' },
@@ -226,6 +303,18 @@
           ),
           Minimize: ({ className = "w-5 h-5" }) => (
             <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 14h6m0 0v6m0-6l-5 5m15-5h-6m0 0v6m0-6l5 5M4 10h6m0 0V4m0 6l-5-5m15 5h-6m0 0V4m0 6l5-5" /></svg>
+          ),
+          Export: ({ className = "w-4 h-4" }) => (
+            <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          ),
+          Warning: ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+          ),
+          MessageCircle: ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+          ),
+          Send: ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
           )
         };
 
@@ -236,7 +325,8 @@
             icon: <Icon.User />,
             questions: [
               { name: 'assessment_time', type: 'select_one', label: 'ການປະເມີນ', choices: 'assessment_time', required: true },
-              { name: '_101', type: 'text', label: '101. ລະຫັດການປະເມີນ', required: true },
+              { name: '_101', type: 'text', label: '101. ກະລຸນາໄສ່ຊື່ ແລະ ນາມສະກຸນຂອງທ່ານ', required: true },
+              { name: '_101_1', type: 'select_one', label: '101.1. ກະລຸນາເລຶອກເພດຂອງທ່ານ', choices: 'gender', required: true },
               { name: '_102', type: 'date', label: '102. ວັນທີ', required: true },
               { name: '_103', type: 'select_one', label: '103. ແຂວງ', choices: 'province', required: true },
               { name: '_104', type: 'select_one', label: '104. ເມືອງ', choices: 'district', required: true, choice_filter: (data) => data._103 },
@@ -258,9 +348,9 @@
             title: 'III. ການຈັດວາງ - ຂັບເຄື່ອນ',
             icon: <Icon.Users />,
             questions: [
-              { name: 'align1', type: 'select_one', label: '1. “ສະພາບແວດລ້ອມການເຮັດວຽກ” ແມ່ນຫຍັງ?', choices: 'aligna', required: true },
-              { name: 'align2', type: 'select_one', label: '2. ເຮົາເອີ້ນສະມາຊິກໃນທີມຜູ້ທີ່ມັກເບິ່ງກິດຈະກຳ ແລະ ຕ້ອງໄດ້ປຸກລະດົມໃນການມີສ່ວນຮ່ວມ?', choices: 'alignb', required: true },
-              { name: 'align3', type: 'select_one', label: '3. ລຸ່ມນີ້ມີອັນໃດແດ່ທີ່ເປັນທັກສະການອໍານວຍຄວາມສະດວກທີ່ດີ?', choices: 'alignc', required: true }
+              { name: 'align1', type: 'select_one', label: '4. “ສະພາບແວດລ້ອມການເຮັດວຽກ” ແມ່ນຫຍັງ?', choices: 'aligna', required: true },
+              { name: 'align2', type: 'select_one', label: '5. ເຮົາເອີ້ນສະມາຊິກໃນທີມຜູ້ທີ່ມັກເບິ່ງກິດຈະກຳ ແລະ ຕ້ອງໄດ້ປຸກລະດົມໃນການມີສ່ວນຮ່ວມ?', choices: 'alignb', required: true },
+              { name: 'align3', type: 'select_one', label: '6. ລຸ່ມນີ້ມີອັນໃດແດ່ທີ່ເປັນທັກສະການອໍານວຍຄວາມສະດວກທີ່ດີ?', choices: 'alignc', required: true }
             ]
           },
           {
@@ -268,9 +358,9 @@
             title: 'IV. ການສ້າງແຮງບັນດານໃຈ',
             icon: <Icon.Lightbulb />,
             questions: [
-              { name: 'inspire1', type: 'select_one', label: '1. ການປະຕິບັດກ່ຽວກັບການບໍລິຫານທີ່ສໍາຄັນອັນໃດ ທີ່ຈະເພີ່ມຄວາມໄວ້ວາງໃຈ?', choices: 'inspirea', required: true },
-              { name: 'inspire2', type: 'select_one', label: '2. ການສ້າງຄວາມໄວ້ວາງໃຈແມ່ນສໍາຄັນ ສໍາຫຼັບ?', choices: 'inspireb', required: true },
-              { name: 'inspire3', type: 'select_one', label: '3. ເտັກນິກການສື່ສານທີ່ດີແມ່ນຫຍັງ?', choices: 'inspirec', required: true }
+              { name: 'inspire1', type: 'select_one', label: '7. ການປະຕິບັດກ່ຽວກັບການບໍລິຫານທີ່ສໍາຄັນອັນໃດ ທີ່ຈະເພີ່ມຄວາມໄວ້ວາງໃຈ?', choices: 'inspirea', required: true },
+              { name: 'inspire2', type: 'select_one', label: '8. ການສ້າງຄວາມໄວ້ວາງໃຈແມ່ນສໍາຄັນ ສໍາຫຼັບ?', choices: 'inspireb', required: true },
+              { name: 'inspire3', type: 'select_one', label: '9. ເຕັກນິກການສື່ສານທີ່ດີແມ່ນຫຍັງ?', choices: 'inspirec', required: true }
             ]
           },
           {
@@ -278,7 +368,7 @@
             title: 'V. ການຄຸ້ມຄອງ – ຄວາມຮັບຜິດຊອບ',
             icon: <Icon.ShieldCheck />,
             questions: [
-              { name: 'gov1', type: 'select_one', label: '1. ອັນໃດເປັນວິທີການເກັບກຳຄໍາຄິດເຫັນຈາກລູກຄ້າ?', choices: 'gov1', required: true }
+              { name: 'gov1', type: 'select_one', label: '10. ອັນໃດເປັນວິທີການເກັບກຳຄໍາຄິດເຫັນຈາກລູກຄ້າ?', choices: 'gov1', required: true }
             ]
           }
         ];
@@ -304,40 +394,287 @@
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none z-0">
                   {yAxisTicks.map(tick => (
                     <div key={`line-${tick}`} className="w-full h-px bg-gray-100"></div>
-                  ))}
-                </div>
-                {data.map((item, index) => {
-                  if (!item) return null;
-                  const scoreValue = typeof item.score === 'number' ? item.score : 0;
-                  const heightPercentage = (scoreValue / (maxScore || 10)) * 100;
-                  const isPre = item.assessment_time === 'pre';
-                  return (
-                    <div key={item.id || index} className="relative flex flex-col items-center justify-end h-full z-10 group" style={{ minWidth: isFullscreen ? '60px' : '45px' }}>
-                      <span className={`font-bold text-gray-700 mb-1 transition-all duration-700 ${isFullscreen ? 'text-base' : 'text-sm'}`}>
-                        {scoreValue}
-                      </span>
-                      <div 
-                        className={`rounded-t-sm transition-all duration-700 ease-out shadow-sm hover:shadow-md cursor-pointer hover:opacity-85 ${isFullscreen ? 'w-14' : 'w-10'}`}
-                        style={{ height: `${heightPercentage}%`, backgroundColor: isPre ? '#35675D' : '#BF5A38' }}
-                      ></div>
-                      <div className={`absolute -bottom-10 text-center -rotate-45 transform origin-top left-1/2 -translate-x-1/2 font-bold text-gray-700 truncate ${isFullscreen ? 'w-24 text-xs' : 'w-20 text-[11px]'}`}>
-                        {item._101 || '-'}
-                      </div>
-                    </div>
-                  );
-                })}
+                ))}
               </div>
+              {data.map((item, index) => {
+                if (!item) return null;
+                const scoreValue = typeof item.score === 'number' ? item.score : 0;
+                const heightPercentage = (scoreValue / (maxScore || 10)) * 100;
+                const isPre = item.assessment_time === 'pre';
+                return (
+                  <div key={item.id || index} className="relative flex flex-col items-center justify-end h-full z-10 group" style={{ minWidth: isFullscreen ? '60px' : '45px' }}>
+                    <span className={`font-bold text-gray-700 mb-1 transition-all duration-700 ${isFullscreen ? 'text-base' : 'text-sm'}`}>
+                      {scoreValue}
+                    </span>
+                    <div 
+                      className={`rounded-t-sm transition-all duration-700 ease-out shadow-sm hover:shadow-md cursor-pointer hover:opacity-85 ${isFullscreen ? 'w-14' : 'w-10'}`}
+                      style={{ height: `${heightPercentage}%`, backgroundColor: isPre ? '#35675D' : '#BF5A38' }}
+                    ></div>
+                    <div className={`absolute -bottom-10 text-center -rotate-45 transform origin-top left-1/2 -translate-x-1/2 font-bold text-gray-700 truncate ${isFullscreen ? 'w-24 text-xs' : 'w-20 text-[11px]'}`}>
+                      {item._101 || '-'}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
+          </div>
+        );
+      };
+
+      // ==========================================
+      // QUESTION STATS CHART COMPONENT (HORIZONTAL GROUPED BARS)
+      // ==========================================
+      const QuestionChart = ({ data, correctAnswers, surveyStructure, isFullscreen }) => {
+        if (!data || data.length === 0) {
+          return <div className={`flex items-center justify-center text-gray-400 ${isFullscreen ? 'h-[50vh]' : 'h-64'}`}>ຍັງບໍ່ມີຂໍ້ມູນການປະເມີນ (No data yet)</div>;
+        }
+
+        // ສ້າງລາຍຊື່ຄຳຖາມທີ່ມີສະເຫຼີຍ ເພື່ອນຳມາສະແດງເປັນແກນ Y
+        const questions = [];
+        surveyStructure.forEach(section => {
+          section.questions.forEach(q => {
+            if (correctAnswers[q.name]) {
+              questions.push({ name: q.name, label: q.label });
+            }
+          });
+        });
+
+        // ແຍກຂໍ້ມູນກ່ອນ ແລະ ຫຼັງ
+        const preData = data.filter(d => d.assessment_time === 'pre');
+        const postData = data.filter(d => d.assessment_time === 'post');
+
+        // ຄິດໄລ່ຈຳນວນຄົນຕອບຖືກແຕ່ລະຂໍ້
+        const stats = questions.map((q) => {
+          const preCorrect = preData.filter(d => d[q.name] === correctAnswers[q.name]).length;
+          const postCorrect = postData.filter(d => d[q.name] === correctAnswers[q.name]).length;
+          return {
+            id: q.name,
+            label: q.label,
+            preCount: preCorrect,
+            postCount: postCorrect
+          };
+        });
+
+        // ຫາຄ່າສູງສຸດເພື່ອເປັນເກນຄວາມຍາວຂອງແຖບກຣາຟ (100% width)
+        const maxCount = Math.max(...stats.map(s => Math.max(s.preCount, s.postCount)), 1);
+
+        return (
+          <div className={`w-full flex flex-col gap-4 transition-all duration-300 ${isFullscreen ? 'h-[65vh] overflow-y-auto' : 'max-h-[500px] overflow-y-auto'} pr-2 py-4`}>
+            {stats.map((item) => {
+              const preWidth = (item.preCount / maxCount) * 100;
+              const postWidth = (item.postCount / maxCount) * 100;
+              
+              return (
+                <div key={item.id} className="flex items-center w-full gap-3">
+                  {/* ຫົວຂໍ້ຄຳຖາມ (ເບື້ອງຊ້າຍ) */}
+                  <div className="w-1/3 text-xs text-gray-700 text-right leading-relaxed line-clamp-3" title={item.label}>
+                    {item.label}
+                  </div>
+                  
+                  {/* ແຖບກຣາຟ (ເບື້ອງຂວາ) */}
+                  <div className="w-2/3 flex flex-col gap-1.5 border-l-2 border-gray-300 pl-3 py-1">
+                    {/* ແຖບ Pre-test (ສີຂຽວ) */}
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="h-4 bg-[#35675D] transition-all duration-700 ease-out rounded-r-sm" 
+                        style={{ width: `${preWidth}%`, minWidth: item.preCount > 0 ? '4px' : '0' }}
+                      ></div>
+                      <span className="text-[11px] text-gray-600 font-bold">{item.preCount}</span>
+                    </div>
+                    
+                    {/* ແຖບ Post-test (ສີສົ້ມ) */}
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="h-4 bg-[#BF5A38] transition-all duration-700 ease-out rounded-r-sm" 
+                        style={{ width: `${postWidth}%`, minWidth: item.postCount > 0 ? '4px' : '0' }}
+                      ></div>
+                      <span className="text-[11px] text-gray-600 font-bold">{item.postCount}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // BOTTOM 3 QUESTIONS COMPONENT
+      // ==========================================
+      const BottomThreeChart = ({ data, correctAnswers, surveyStructure }) => {
+        if (!data || data.length === 0) return <div className="text-center text-gray-400 py-4">ຍັງບໍ່ມີຂໍ້ມູນ</div>;
+
+        const stats = Object.keys(correctAnswers).map(key => {
+          let total = data.length;
+          let correct = data.filter(d => d[key] === correctAnswers[key]).length;
+          let percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+          
+          let label = key;
+          surveyStructure.forEach(sec => {
+            const q = sec.questions.find(q => q.name === key);
+            if (q) label = q.label;
+          });
+
+          return { id: key, label, percentage };
+        });
+
+        // ຈັດລຽງເປີເຊັນຕອບຖືກຈາກໜ້ອຍໄປຫາຫຼາຍ ແລ້ວຕັດເອົາແຕ່ 3 ອັນດັບທຳອິດ
+        stats.sort((a, b) => a.percentage - b.percentage);
+        const bottom3 = stats.slice(0, 3);
+
+        return (
+          <div className="flex flex-col gap-3 mt-2 p-2">
+            {bottom3.map((item, idx) => (
+              <div key={item.id} className="flex items-center gap-4 p-4 bg-red-50/50 rounded-xl border border-red-100 transition-all hover:bg-red-50">
+                <div className="w-10 h-10 rounded-full bg-white text-red-600 flex items-center justify-center font-bold text-lg shrink-0 shadow-sm border border-red-200">
+                  {idx + 1}
+                </div>
+                <div className="flex-1 text-sm md:text-base text-gray-800 leading-relaxed line-clamp-2" title={item.label}>
+                  {item.label}
+                </div>
+                <div className="w-24 md:w-32 flex flex-col gap-1.5 shrink-0">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 font-medium">ຕອບຖືກ</span>
+                    <span className="font-bold text-red-600">{item.percentage}%</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${item.percentage}%` }}></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // AI CHAT COMPONENT (ກ່ອງແຊັດ AI)
+      // ==========================================
+      const AIChatBox = () => {
+        const [isOpen, setIsOpen] = useState(false);
+        const [messages, setMessages] = useState([{ role: 'model', text: 'ສະບາຍດີ! ຂ້ອຍຄືຜູ້ຊ່ວຍ AI ຂອງລະບົບ LMG. ທ່ານມີຫຍັງໃຫ້ຂ້ອຍຊ່ວຍບໍ່?' }]);
+        const [input, setInput] = useState('');
+        const [isLoading, setIsLoading] = useState(false);
+
+        const sendMessage = async () => {
+          if (!input.trim() || isLoading) return;
+          const userMsg = input.trim();
+          setInput('');
+          setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+          setIsLoading(true);
+
+          try {
+             const apiKey = ""; // API Key ຈະຖືກສະໜອງໃຫ້ໂດຍລະບົບແວດລ້ອມອັດຕະໂນມັດ
+             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+             
+             let response;
+             let retries = 0;
+             const delays = [1000, 2000, 4000, 8000, 16000];
+             
+             while (retries <= 5) {
+               try {
+                 response = await fetch(url, {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({
+                     contents: [{ parts: [{ text: userMsg }] }],
+                     systemInstruction: { parts: [{ text: "ເຈົ້າເປັນຜູ້ຊ່ວຍ AI ສຳລັບລະບົບປະເມີນຜົນ LMG ຕອບເປັນພາສາລາວສະເໝີ ແລະ ສຸພາບ. ຕອບໃຫ້ສັ້ນກະທັດຮັດເຂົ້າໃຈງ່າຍ." }] }
+                   })
+                 });
+                 if (response.ok) break;
+                 if (retries === 5) throw new Error("Max retries reached");
+                 await new Promise(r => setTimeout(r, delays[retries]));
+                 retries++;
+               } catch (e) {
+                 if (retries === 5) throw e;
+                 await new Promise(r => setTimeout(r, delays[retries]));
+                 retries++;
+               }
+             }
+             
+             const data = await response.json();
+             const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "ຂໍອະໄພ, ເກີດຂໍ້ຜິດພາດໃນການປະມວນຜົນ.";
+             setMessages(prev => [...prev, { role: 'model', text: aiText }]);
+          } catch (error) {
+             setMessages(prev => [...prev, { role: 'model', text: "ຂໍອະໄພ, ບໍ່ສາມາດເຊື່ອມຕໍ່ກັບ AI ໄດ້ໃນເວລານີ້. ກະລຸນາກວດສອບອິນເຕີເນັດຂອງທ່ານ." }]);
+          } finally {
+             setIsLoading(false);
+          }
         };
 
-        // ==========================================
-        // MAIN APPLICATION COMPONENT (USING LOCALSTORAGE PERSISTENCE)
-        // ==========================================
-        function App() {
-          const [user, setUser] = useState({ uid: 'local-user', isAnonymous: true });
+        return (
+          <div className="fixed bottom-4 right-4 z-[999] font-noto">
+            {isOpen ? (
+              <div className="bg-white w-80 md:w-96 rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-4">
+                <div className="bg-blue-600 text-white p-3 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Icon.MessageCircle className="w-5 h-5" />
+                    <span className="font-bold text-sm">ຜູ້ຊ່ວຍ AI LMG</span>
+                  </div>
+                  <button onClick={() => setIsOpen(false)} className="hover:bg-blue-700 p-1 rounded transition-colors">
+                    <Icon.X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="h-80 overflow-y-auto p-4 flex flex-col gap-3 bg-gray-50">
+                  {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'}`}>
+                      <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="self-start bg-white border border-gray-200 p-3 rounded-2xl rounded-bl-sm shadow-sm">
+                      <div className="flex gap-1.5 items-center h-4">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: "0.2s"}}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: "0.4s"}}></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="p-3 bg-white border-t border-gray-200 flex gap-2">
+                  <input 
+                    type="text" 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="ພິມຂໍ້ຄວາມຖາມ AI ຢູ່ທີ່ນີ້..."
+                    className="flex-1 px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                    disabled={isLoading}
+                  />
+                  <button 
+                    onClick={sendMessage}
+                    disabled={!input.trim() || isLoading}
+                    className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                  >
+                    <Icon.Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setIsOpen(true)}
+                className="bg-blue-600 text-white p-4 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] hover:bg-blue-700 hover:scale-105 hover:-translate-y-1 transition-all flex items-center justify-center group"
+                title="ສອບຖາມຜູ້ຊ່ວຍ AI"
+              >
+                <Icon.MessageCircle className="w-6 h-6" />
+              </button>
+            )}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // MAIN APPLICATION COMPONENT (USING LOCALSTORAGE PERSISTENCE)
+      // ==========================================
+      function App() {
+        const [user, setUser] = useState({ uid: 'local-user', isAnonymous: true });
           const [isAdmin, setIsAdmin] = useState(false); 
           const [isChartFullscreen, setIsChartFullscreen] = useState(false);
+          const [isCloudMode, setIsCloudMode] = useState(false);
           
           const [showAdminLogin, setShowAdminLogin] = useState(false);
           const [adminPasswordInput, setAdminPasswordInput] = useState('');
@@ -359,6 +696,9 @@
           const [editId, setEditId] = useState(null);
           const [chartFilter, setChartFilter] = useState('all'); 
           const [selectedSubmission, setSelectedSubmission] = useState(null);
+          
+          // State ສໍາລັບເປີດ/ປິດ Dropdown ສົ່ງອອກຂໍ້ມູນ
+          const [showExportDropdown, setShowExportDropdown] = useState(false);
 
           // ໂຫຼດຂໍ້ມູນຈາກ LocalStorage ເປັນຄ່າເລີ່ມຕົ້ນ (ພ້ອມທັງກວດສອບຄວາມປອດໄພ)
           const [submissions, setSubmissions] = useState(() => {
@@ -381,12 +721,82 @@
             ];
           });
 
-          // ບັນທຶກຂໍ້ມູນລົງ LocalStorage ທຸກຄັ້ງທີ່ມີການປ່ຽນແປງ submissions
+          // ບັນທຶກຂໍ້ມູນລົງ LocalStorage ຖ້າບໍ່ໄດ້ໃຊ້ Cloud Mode
           useEffect(() => {
-            if (Array.isArray(submissions)) {
+            if (!isCloudMode && Array.isArray(submissions)) {
               localStorage.setItem('lmg_submissions_data', JSON.stringify(submissions));
             }
-          }, [submissions]);
+          }, [submissions, isCloudMode]);
+
+          // ການຈັດການລະບົບ Auth (Firebase ຫາກມີການຕັ້ງຄ່າ)
+          useEffect(() => {
+            const initAuth = async () => {
+              if (!isFirebaseConfigured || !auth) {
+                setUser({ uid: 'local-user', isAnonymous: true });
+                setIsCloudMode(false);
+                return;
+              }
+              try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                  await auth.signInWithCustomToken(__initial_auth_token);
+                } else {
+                  await auth.signInAnonymously();
+                }
+              } catch (error) {
+                console.error("Auth error:", error);
+                // Fallback to local mode if auth fails
+                setIsCloudMode(false);
+              }
+            };
+            initAuth();
+            
+            if (auth && isFirebaseConfigured) {
+                const unsubscribe = auth.onAuthStateChanged(currentUser => {
+                    if(currentUser) {
+                        setUser(currentUser);
+                        setIsCloudMode(true);
+                    } else {
+                        setIsCloudMode(false);
+                    }
+                });
+                return () => unsubscribe();
+            }
+          }, []);
+
+          // ໂຫຼດຂໍ້ມູນ (ຈາກ LocalStorage ຫາກບໍ່ມີ Firebase, ຈາກ Firestore ຫາກມີ Firebase)
+          useEffect(() => {
+            if (!user || !isAdmin) return;
+
+            // ກໍລະນີມີ Firebase: ຊິງຄ໌ຂໍ້ມູນສົດໆຈາກ Cloud Firestore
+            if (isCloudMode && db) {
+                try {
+                    const submissionsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('assessments');
+                    const unsubscribe = submissionsRef.onSnapshot((snapshot) => {
+                        // ຫາກເຊື່ອມຕໍ່ສຳເລັດ ແລະ ໄດ້ຮັບຂໍ້ມູນ, ຮັບປະກັນວ່າຢູ່ໃນໂໝດຄລາວ
+                        setIsCloudMode(true);
+                        
+                        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        data.sort((a, b) => {
+                          const timeA = a.timestamp ? (typeof a.timestamp.toMillis === 'function' ? a.timestamp.toMillis() : a.timestamp) : 0;
+                          const timeB = b.timestamp ? (typeof b.timestamp.toMillis === 'function' ? b.timestamp.toMillis() : b.timestamp.timestamp) : 0;
+                          return timeA - timeB; 
+                        });
+                        setSubmissions(data);
+                      },
+                      (error) => {
+                          console.error("Firestore Fetching Error:", error);
+                          // ຖ້າດຶງຂໍ້ມູນ Cloud ບໍ່ໄດ້ຍ້ອນ Permission Denied ຫຼື ການເຊື່ອມຕໍ່, ໃຫ້ສະລັບກັບມາໃຊ້ LocalStorage ອັດຕະໂນມັດ
+                          console.warn("Falling back to LocalStorage due to Cloud DB error.");
+                          setIsCloudMode(false);
+                      }
+                    );
+                    return () => unsubscribe();
+                } catch (err) {
+                    console.error("Error setting up Firestore listener:", err);
+                    setIsCloudMode(false);
+                }
+            }
+          }, [user, isAdmin, isCloudMode]);
 
           const maxTotalScore = Object.keys(correctAnswers).length;
 
@@ -452,10 +862,26 @@
             setDeleteConfirmId(id);
           };
 
-          const confirmDelete = () => {
+          const confirmDelete = async () => {
             if (!deleteConfirmId) return;
-            setSubmissions(prev => prev.filter(s => s && s.id !== deleteConfirmId));
-            setDeleteConfirmId(null);
+
+            // ກໍລະນີໂໝດ LocalStorage ຫຼື ເມື່ອ Cloud ໃຊ້ການບໍ່ໄດ້
+            if (!isCloudMode || !db) {
+              const updatedSubmissions = submissions.filter(s => s && s.id !== deleteConfirmId);
+              setSubmissions(updatedSubmissions);
+              setDeleteConfirmId(null);
+              return;
+            }
+
+            // ກໍລະນີໂໝດ Firebase Cloud
+            try {
+              await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('assessments').doc(deleteConfirmId).delete();
+              setDeleteConfirmId(null);
+            } catch (error) {
+              console.error("Error deleting document from Firestore:", error);
+              setSubmitErrorMsg("ບໍ່ສາມາດລຶບຂໍ້ມູນຈາກ Cloud ໄດ້, ອາດຈະບໍ່ມີສິດທິ໌ ຫຼື ຂາດການເຊື່ອມຕໍ່.");
+              setDeleteConfirmId(null);
+            }
           };
 
           const handleChange = (name, value) => {
@@ -501,7 +927,7 @@
             return currentScore;
           };
 
-          const handleSubmit = () => {
+          const handleSubmit = async () => {
             if (!validateForm()) return;
             setIsSubmitting(true);
             setSubmitErrorMsg(''); 
@@ -509,30 +935,56 @@
             const finalScore = calculateScore();
             setRecentScore({ total: finalScore, max: maxTotalScore });
 
-            const timestampVal = editId && formData.timestamp ? formData.timestamp : Date.now();
+            const timestampVal = editId && formData.timestamp ? formData.timestamp : (isCloudMode && db ? firebase.firestore.FieldValue.serverTimestamp() : Date.now());
             const dataToSave = {
               ...formData,
               score: finalScore,
               maxScore: maxTotalScore,
               percentage: Math.round((finalScore / maxTotalScore) * 100),
               timestamp: timestampVal,
-              updatedAt: editId ? Date.now() : null, 
-              id: editId || 'local-' + Math.random().toString(36).substr(2, 9)
+              updatedAt: editId ? (isCloudMode && db ? firebase.firestore.FieldValue.serverTimestamp() : Date.now()) : null, 
+              userId: formData.userId || user.uid
             };
 
-            if (editId) {
-              setSubmissions(prev => prev.map(s => s && s.id === editId ? dataToSave : s));
-            } else {
-              setSubmissions(prev => [...prev, dataToSave]);
-            }
-            
-            setShowResultForm(true);
-            setIsSubmitting(false);
-            if (isAdmin) {
+            // ກໍລະນີໂໝດ LocalStorage ຫຼື ເມື່ອ Cloud ໃຊ້ການບໍ່ໄດ້: ບັນທຶກໃນເຄື່ອງ
+            if (!isCloudMode || !db) {
+              let updatedSubmissions;
+              if (editId) {
+                updatedSubmissions = submissions.map(s => s && s.id === editId ? { ...dataToSave, id: editId } : s);
+              } else {
+                const newDoc = { ...dataToSave, id: 'local-' + Math.random().toString(36).substr(2, 9) };
+                updatedSubmissions = [...submissions, newDoc];
+              }
+              setSubmissions(updatedSubmissions);
+              setShowResultForm(true);
+              setIsSubmitting(false);
               const leftPane = document.getElementById('left-pane');
               if (leftPane) leftPane.scrollTo({ top: 0, behavior: 'smooth' });
-            } else {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              return;
+            }
+
+            // ກໍລະນີໂໝດ Firebase Cloud: ສົ່ງຂໍ້ມູນຂຶ້ນຄລາວ
+            try {
+              const assessmentsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('assessments');
+              if (editId) {
+                await assessmentsRef.doc(editId).update(dataToSave);
+              } else {
+                await assessmentsRef.add(dataToSave);
+              }
+              setShowResultForm(true);
+              setIsSubmitting(false);
+              const leftPane = document.getElementById('left-pane');
+              if (leftPane) leftPane.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (error) {
+              console.error("Firestore Saving Error:", error);
+              // ຫາກການບັນທຶກຂຶ້ນຄລາວລົ້ມເຫຼວ (ເຊັ່ນ ບໍ່ມີອິນເຕີເນັດ ຫຼື ບໍ່ມີສິດ), ແຈ້ງເຕືອນ ແລະ ປ່ຽນໄປບັນທຶກແບບ Local
+              setSubmitErrorMsg("ບໍ່ສາມາດບັນທຶກໄປຍັງ Cloud ໄດ້ (ອາດຈະບໍ່ມີອິນເຕີເນັດ ຫຼື ບໍ່ມີສິດທິ). ລະບົບຈະບັນທຶກລົງເຄື່ອງແທນ.");
+              
+              setIsCloudMode(false);
+              const newDoc = { ...dataToSave, id: 'local-' + Math.random().toString(36).substr(2, 9), timestamp: Date.now() };
+              setSubmissions(prev => [...prev, newDoc]);
+              setShowResultForm(true);
+              setIsSubmitting(false);
             }
           };
 
@@ -561,24 +1013,33 @@
           // ກັ່ນຕອງຄວາມປອດໄພຂອງອາເຣ submissions
           const safeSubmissions = Array.isArray(submissions) ? submissions.filter(Boolean) : [];
 
+          // ຈັດລຽງຂໍ້ມູນສຳລັບແຜນວາດ ຕາມລະຫັດ A-Z, ກ-ຮ
           const filteredChartData = safeSubmissions.filter(s => {
             if (!s) return false;
             if (chartFilter === 'all') return true;
             return s.assessment_time === chartFilter;
+          }).sort((a, b) => {
+            const codeA = (a._101 || '').toString();
+            const codeB = (b._101 || '').toString();
+            const cmp = codeA.localeCompare(codeB, 'lo', { numeric: true });
+            if (cmp !== 0) return cmp;
+            // ຖ້າລະຫັດຄືກັນ ໃຫ້ລຽງ Pre-test ຂຶ້ນກ່ອນ Post-test
+            return (a.assessment_time === 'pre' ? -1 : 1);
           });
 
-          // --- ຈັດກຸ່ມຂໍ້ມູນຢ່າງປອດໄພ ປ້ອງກັນ null values Crash ---
+          // --- ຈັດກຸ່ມຂໍ້ມູນຢ່າງປອດໄພ ແລະ ຈັດລຽງຕາຕະລາງ ຕາມລະຫັດ A-Z, ກ-ຮ ---
           const groupedSubmissions = Object.values(safeSubmissions.reduce((acc, sub) => {
             if (!sub) return acc;
             const code = sub._101;
             if (!code) return acc;
             
             if (!acc[code]) {
-              acc[code] = { code, district: sub._104 || '', workplace: sub._105 || '', pre: null, post: null, latestTime: 0 };
+              acc[code] = { code, gender: sub._101_1 || '', district: sub._104 || '', workplace: sub._105 || '', pre: null, post: null, latestTime: 0 };
             }
             if (sub.assessment_time === 'pre') acc[code].pre = sub;
             if (sub.assessment_time === 'post') acc[code].post = sub;
             
+            acc[code].gender = sub._101_1 || acc[code].gender;
             acc[code].district = sub._104 || acc[code].district;
             acc[code].workplace = sub._105 || acc[code].workplace;
             
@@ -595,10 +1056,203 @@
             if (time > acc[code].latestTime) acc[code].latestTime = time;
             
             return acc;
-          }, {})).sort((a, b) => b.latestTime - a.latestTime);
+          }, {})).sort((a, b) => {
+            const codeA = (a.code || '').toString();
+            const codeB = (b.code || '').toString();
+            return codeA.localeCompare(codeB, 'lo', { numeric: true });
+          });
+
+          // ==========================================
+          // ຟັງຊັນສຳລັບການສົ່ງອອກຂໍ້ມູນ (Export Functions)
+          // ==========================================
+          const prepareFlatData = () => {
+            return groupedSubmissions.map(group => ({
+              'ຊື່ ແລະ ນາມສະກຸນ': group.code,
+              'ເພດ': group.pre ? getChoiceLabel('gender', group.pre._101_1) : (group.post ? getChoiceLabel('gender', group.post._101_1) : '-'),
+              'ແຂວງ': group.pre ? getChoiceLabel('province', group.pre._103) : (group.post ? getChoiceLabel('province', group.post._103) : '-'),
+              'ເມືອງ': getChoiceLabel('district', group.district),
+              'ບ່ອນເຮັດວຽກ': group.workplace || '-',
+              'ຄະແນນກ່ອນ (Pre-test)': group.pre ? `${group.pre.score}/10` : '-',
+              'ວັນທີປະເມີນກ່ອນ': group.pre ? group.pre._102 : '-',
+              'ຄະແນນຫຼັງ (Post-test)': group.post ? `${group.post.score}/10` : '-',
+              'ວັນທີປະເມີນຫຼັງ': group.post ? group.post._102 : '-'
+            }));
+          };
+
+          const handleExportExcel = () => {
+            try {
+              const flatData = prepareFlatData();
+              const worksheet = XLSX.utils.json_to_sheet(flatData);
+              const workbook = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(workbook, worksheet, "LMG Report");
+              
+              // ປັບຄວາມກວ້າງຂອງຖັນອັດຕະໂນມັດ
+              const max_widths = Object.keys(flatData[0] || {}).map(key => ({
+                wch: Math.max(key.length * 2, ...flatData.map(row => (row[key] || '').toString().length * 1.5))
+              }));
+              worksheet['!cols'] = max_widths;
+
+              XLSX.writeFile(workbook, `ບົດລາຍງານ_LMG_${Date.now()}.xlsx`);
+            } catch (err) {
+              console.error("Excel Export Error:", err);
+              alert("ບໍ່ສາມາດສົ່ງອອກໄຟລ໌ Excel ໄດ້.");
+            }
+          };
+
+          const handleExportWord = () => {
+            try {
+              const flatData = prepareFlatData();
+              let docHtml = `
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head>
+                  <meta charset="utf-8">
+                  <title>ບົດລາຍງານ LMG</title>
+                  <style>
+                    body { font-family: 'Noto Sans Lao', Arial, sans-serif; line-height: 1.6; }
+                    h2 { text-align: center; color: #1e3a8a; font-size: 18pt; margin-bottom: 5px; }
+                    p { text-align: center; color: #555; margin-bottom: 25px; }
+                    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 11pt; }
+                    th { background-color: #f1f5f9; color: #1e293b; font-weight: bold; }
+                    .center { text-align: center; }
+                  </style>
+                </head>
+                <body>
+                  <h2>ບົດລາຍງານຜົນການປະເມີນ ກ່ອນ-ຫຼັງ ຝຶກອົບຮົມ LMG</h2>
+                  <p>ວັນທີດຶງບົດລາຍງານ: ${new Date().toLocaleDateString('lo-LA')}</p>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ຊື່ ແລະ ນາມສະກຸນ</th>
+                        <th>ເພດ</th>
+                        <th>ແຂວງ</th>
+                        <th>ເມືອງ</th>
+                        <th>ບ່ອນເຮັດວຽກ</th>
+                        <th class="center">ຄະແນນກ່ອນ</th>
+                        <th class="center">ວັນທີກ່ອນ</th>
+                        <th class="center">ຄະແນນຫຼັງ</th>
+                        <th class="center">ວັນທີຫຼັງ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+              `;
+
+              flatData.forEach(item => {
+                docHtml += `
+                  <tr>
+                    <td><b>${item['ຊື່ ແລະ ນາມສະກຸນ']}</b></td>
+                    <td>${item['ເພດ']}</td>
+                    <td>${item['ແຂວງ']}</td>
+                    <td>${item['ເມືອງ']}</td>
+                    <td>${item['ບ່ອນເຮັດວຽກ']}</td>
+                    <td class="center" style="color: #35675d; font-weight: bold;">${item['ຄະແນນກ່ອນ (Pre-test)']}</td>
+                    <td class="center">${item['ວັນທີປະເມີນກ່ອນ']}</td>
+                    <td class="center" style="color: #bf5a38; font-weight: bold;">${item['ຄະແນນຫຼັງ (Post-test)']}</td>
+                    <td class="center">${item['ວັນທີປະເມີນຫຼັງ']}</td>
+                  </tr>
+                `;
+              });
+
+              docHtml += `
+                    </tbody>
+                  </table>
+                </body>
+                </html>
+              `;
+
+              const blob = new Blob(['\ufeff' + docHtml], { type: 'application/msword;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `ບົດລາຍງານ_LMG_${Date.now()}.doc`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error("Word Export Error:", err);
+              alert("ບໍ່ສາມາດສົ່ງອອກໄຟລ໌ Word ໄດ້.");
+            }
+          };
+
+          const handleExportPDF = () => {
+            try {
+              const element = document.createElement('div');
+              element.style.padding = '25px';
+              element.style.background = '#ffffff';
+              
+              element.innerHTML = `
+                <div style="font-family: 'Noto Sans Lao', sans-serif;">
+                  <div style="text-align: center; margin-bottom: 25px;">
+                    <h2 style="font-size: 22px; color: #1e3a8a; font-weight: bold; margin-bottom: 5px;">ບົດລາຍງານຜົນການປະເມີນ ກ່ອນ-ຫຼັງ ຝຶກອົບຮົມ LMG</h2>
+                    <p style="font-size: 12px; color: #4b5563;">ວັນທີດຶງບົດລາຍງານ: ${new Date().toLocaleDateString('lo-LA')}</p>
+                  </div>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 15px;">
+                    <thead>
+                      <tr style="background-color: #f1f5f9;">
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-weight: bold; color: #1e293b;">ຊື່ ແລະ ນາມສະກຸນ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-weight: bold; color: #1e293b;">ເພດ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-weight: bold; color: #1e293b;">ແຂວງ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-weight: bold; color: #1e293b;">ເມືອງ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-weight: bold; color: #1e293b;">ບ່ອນເຮັດວຽກ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #1e293b;">ຄະແນນກ່ອນ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #1e293b;">ວັນທີກ່ອນ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #1e293b;">ຄະແນນຫຼັງ</th>
+                        <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #1e293b;">ວັນທີຫຼັງ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${groupedSubmissions.map(group => `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; font-weight: bold; color: #1e293b;">${group.code}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; color: #334155;">${getChoiceLabel('gender', group.gender)}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; color: #334155;">${group.pre ? getChoiceLabel('province', group.pre._103) : (group.post ? getChoiceLabel('province', group.post._103) : '-')}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; color: #334155;">${getChoiceLabel('district', group.district)}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; color: #334155;">${group.workplace || '-'}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #35675d;">${group.pre ? `${group.pre.score}/10` : '-'}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; color: #475569;">${group.pre ? group.pre._102 : '-'}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold; color: #bf5a38;">${group.post ? `${group.post.score}/10` : '-'}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; color: #475569;">${group.post ? group.post._102 : '-'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `;
+              
+              const opt = {
+                margin:       10,
+                filename:     `ບົດລາຍງານ_LMG_${Date.now()}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+              };
+              
+              html2pdf().set(opt).from(element).save();
+            } catch (err) {
+              console.error("PDF Export Error:", err);
+              alert("ບໍ່ສາມາດສົ່ງອອກໄຟລ໌ PDF ໄດ້.");
+            }
+          };
 
           return (
             <React.Fragment>
+
+              {/* ແຖບສະແດງສະຖານະເມື່ອເຊື່ອມຕໍ່ Cloud Firebase ຜິດພາດ ຫຼື ບໍ່ໄດ້ຕັ້ງຄ່າ */}
+              {(!isFirebaseConfigured || !isCloudMode) && (
+                <div className="bg-yellow-500 text-white text-center py-2 px-4 text-sm font-bold shadow-md print:hidden flex items-center justify-center gap-2 font-noto">
+                  <Icon.AlertCircle className="w-5 h-5 text-white" />
+                  <span>ແລ່ນໃນໂໝດ LocalStorage (ຂໍ້ມູນບັນທຶກສະເພາະໃນເຄື່ອງນີ້) ເນື່ອງຈາກຍັງບໍ່ໄດ້ເຊື່ອມຕໍ່ Firebase ຄລາວ.</span>
+                </div>
+              )}
+
+              {/* ແຖບສະແດງສະຖານະເມື່ອເຊື່ອມຕໍ່ Cloud Firebase ສົມບູນ */}
+              {isFirebaseConfigured && isCloudMode && (
+                <div className="bg-blue-600 text-white text-center py-2 px-4 text-sm font-bold shadow-md print:hidden flex items-center justify-center gap-2 font-noto">
+                  <Icon.CheckCircle className="w-5 h-5 text-white" />
+                  <span>ເຊື່ອມຕໍ່ຖານຂໍ້ມູນຄລາວສຳເລັດ (Cloud Sync Active) — ຂໍ້ມູນທຸກເຄື່ອງຈະຊິງຄ໌ຫາກັນທັນທີ!</span>
+                </div>
+              )}
 
               {showAdminLogin && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] font-noto">
@@ -800,7 +1454,7 @@
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">
                           {editId ? 'ອັບເດດສຳເລັດ!' : 'ບັນທຶກສຳເລັດ!'}
                         </h2>
-                        <p className="text-gray-500 mb-6">ລະຫັດ: <span className="font-bold text-gray-800">{formData._101}</span> ຖືກ {editId ? 'ອັບເດດລົງ' : 'ບັນທຶກລົງ'}ຖານຂໍ້ມູນແລ້ວ.</p>
+                        <p className="text-gray-500 mb-6">ຊື່ ແລະ ນາມສະກຸນ: <span className="font-bold text-gray-800">{formData._101}</span> ຖືກ {editId ? 'ອັບເດດລົງ' : 'ບັນທຶກລົງ'}ຖານຂໍ້ມູນແລ້ວ.</p>
                         
                         <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 inline-block w-full max-w-xs">
                           <p className="text-sm text-blue-800 font-semibold mb-2">ຄະແນນທີ່ໄດ້ (Score)</p>
@@ -808,7 +1462,7 @@
                         </div>
 
                         <button onClick={startNewEntry} className="w-full py-3.5 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-xl shadow flex justify-center items-center gap-2 transition-colors">
-                          <Icon.Refresh className="w-5 h-5 text-white" /> ກັບຄືນ / ປ້ອນຂໍ້ມູນໃໝ່ (New Entry)
+                          <Icon.RefreshCcw className="w-5 h-5 text-white" /> ກັບຄືນ / ປ້ອນຂໍ້ມູນໃໝ່ (New Entry)
                         </button>
                       </div>
                     )}
@@ -821,21 +1475,11 @@
                   <div className={`${isChartFullscreen ? 'w-full' : 'w-1/2'} h-full overflow-y-auto bg-white z-10 shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)] transition-all duration-300 ease-in-out`}>
                     <div className={`p-4 sm:p-6 lg:p-8 ${isChartFullscreen ? 'max-w-7xl mx-auto' : 'min-w-[400px]'}`}>
                       
-                      <div className="mb-6 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs md:text-sm animate-in fade-in slide-in-from-top-4 duration-300 font-noto">
-                        <h4 className="font-bold text-emerald-900 mb-2 flex items-center gap-1.5">
-                          <Icon.CheckCircle className="w-5 h-5 text-emerald-700" />
-                          ລະບົບເກັບຂໍ້ມູນຖາວອນ LocalStorage (ງ່າຍທີ່ສຸດ ແລະ ປອດໄພ):
-                        </h4>
-                        <p className="leading-relaxed">
-                          ຂໍ້ມູນຜົນການປະເມີນທັງໝົດຈະຖືກບັນທຶກ ແລະ ເກັບຮັກສາໄວ້ໃນບຣາວເຊີຂອງເຄື່ອງນີ້ຢ່າງຖາວອນ (ຢູ່ໄດ້ຫຼາຍປີໂດຍບໍ່ຈຳກັດພຽງແຕ່ 3 ວັນ) ເຮັດໃຫ້ທ່ານສາມາດປິດເຄື່ອງ, ປິດບຣາວເຊີ ຫຼື ອັບໂຫລດຂຶ້ນ GitHub Pages ແລ້ວເປີດກັບມາເບິ່ງຂໍ້ມູນເກົ່າໄດ້ຄົບຖ້ວນຕະຫຼອດເວລາ!
-                        </p>
-                      </div>
-
                       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
                         <div className="flex items-center gap-2">
                           <Icon.Database className="w-6 h-6 text-blue-600" />
                           <h2 className="text-xl font-bold text-gray-800">
-                            "ຂໍ້ມູນ ແລະ ແຜນວາດ"
+                            ຂໍ້ມູນ ແລະ ແຜນວາດ
                           </h2>
                           <button 
                             onClick={() => setIsChartFullscreen(!isChartFullscreen)}
@@ -882,16 +1526,93 @@
                         </div>
                       </div>
 
-                      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-8">
-                        <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-                          <Icon.List />
-                          <h3 className="text-sm font-bold text-gray-700">ລາຍການຂໍ້ມູນທັງໝົດ</h3>
+                      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 mb-8">
+                        <h3 className="text-sm font-bold text-gray-700 mb-4 ml-2">ອັດຕາການຕອບຖືກແຕ່ລະຄຳຖາມ (Correct Answer per Question)</h3>
+                        <QuestionChart data={filteredChartData} correctAnswers={correctAnswers} surveyStructure={surveyStructure} isFullscreen={isChartFullscreen} />
+                        <div className="flex flex-wrap justify-center gap-6 mt-6">
+                          <div className="flex items-center text-xs text-gray-600 font-noto">
+                            <span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#35675D' }}></span> 
+                            ຄະແນນທີ່ຕອບຖືກ ຈາກຜູ້ຕອບຄຳຖາມ ກ່ອນການປະເມີນ
+                          </div>
+                          <div className="flex items-center text-xs text-gray-600 font-noto">
+                            <span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#BF5A38' }}></span> 
+                            ຄະແນນທີ່ຕອບຖືກ ຈາກຜູ້ຕອບຄຳຖາມ ຫຼັງການປະເມີນ
+                          </div>
                         </div>
+                      </div>
+
+                      {/* === BOTTOM 3 QUESTIONS GRAPH === */}
+                      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 mb-8">
+                        <h3 className="text-sm font-bold text-red-700 mb-2 ml-2 flex items-center gap-2">
+                          <Icon.Warning className="w-5 h-5" /> 
+                          ຄຳຖາມ 3 ອັນດັບ ທີ່ມີຜູ້ຕອບຖືກໜ້ອຍທີ່ສຸດ (ຈຸດທີ່ຄວນປັບປຸງ)
+                        </h3>
+                        <BottomThreeChart data={filteredChartData} correctAnswers={correctAnswers} surveyStructure={surveyStructure} />
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+                        
+                        {/* ຫົວຂໍ້ຕາຕະລາງລາຍການຂໍ້ມູນທັງໝົດ ພ້ອມປຸ່ມ dropdown ສົ່ງອອກຜົນ */}
+                        <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Icon.List />
+                            <h3 className="text-sm font-bold text-gray-700">ລາຍການຂໍ້ມູນທັງໝົດ</h3>
+                          </div>
+                          
+                          {/* ========================================== */}
+                          {/* DROPDOWN ສົ່ງອອກຂໍ້ມູນ (PDF, Word, Excel) */}
+                          {/* ========================================== */}
+                          <div className="relative inline-block text-left">
+                            <button 
+                              onClick={() => setShowExportDropdown(!showExportDropdown)}
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none transition-colors shadow-sm"
+                            >
+                              <Icon.Export className="w-3.5 h-3.5 text-gray-600" />
+                              <span>ສົ່ງອອກຂໍ້ມູນ</span>
+                              <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            {/* ກ່ອງພື້ນຫຼັງໂປ່ງໃສ ເພື່ອໃຫ້ຄລິກບ່ອນອື່ນແລ້ວປິດ Dropdown */}
+                            {showExportDropdown && (
+                              <div className="fixed inset-0 z-10 bg-transparent" onClick={() => setShowExportDropdown(false)} />
+                            )}
+
+                            {showExportDropdown && (
+                              <div className="absolute right-0 z-20 mt-1 w-40 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none font-noto border border-gray-100">
+                                <div className="py-1">
+                                  <button 
+                                    onClick={() => { handleExportExcel(); setShowExportDropdown(false); }}
+                                    className="flex items-center w-full px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors gap-2"
+                                  >
+                                    <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+                                    <span>Excel (.xlsx)</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => { handleExportWord(); setShowExportDropdown(false); }}
+                                    className="flex items-center w-full px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors gap-2"
+                                  >
+                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                                    <span>Word (.doc)</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => { handleExportPDF(); setShowExportDropdown(false); }}
+                                    className="flex items-center w-full px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors gap-2"
+                                  >
+                                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                                    <span>PDF (.pdf)</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse min-w-[600px]">
                             <thead>
                               <tr className="bg-white border-b">
-                                <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap">ລະຫັດ</th>
+                                <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap">ຊື່ ແລະ ນາມສະກຸນ</th>
+                                <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap">ເພດ</th>
                                 <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap">ເມືອງ</th>
                                 <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap">ບ່ອນເຮັດວຽກ</th>
                                 <th className="p-3 font-semibold text-gray-500 text-xs whitespace-nowrap text-center">ຄະແນນກ່ອນ</th>
@@ -902,12 +1623,15 @@
                             <tbody>
                               {groupedSubmissions.length === 0 ? (
                                 <tr>
-                                  <td colSpan="6" className="p-8 text-center text-gray-400 text-sm">ຍັງບໍ່ມີຂໍ້ມູນ</td>
+                                  <td colSpan="7" className="p-8 text-center text-gray-400 text-sm">ຍັງບໍ່ມີຂໍ້ມູນ</td>
                                 </tr>
                               ) : (
                                 groupedSubmissions.map((group) => (
                                   <tr key={group.code} className="border-b last:border-b-0 hover:bg-gray-50/50 transition-colors bg-white">
                                     <td className="p-3 font-bold text-gray-800 font-sans text-sm">{group.code}</td>
+                                    <td className="p-3 text-xs text-gray-600 truncate max-w-[80px]">
+                                      {getChoiceLabel('gender', group.gender)}
+                                    </td>
                                     <td className="p-3 text-xs text-gray-600 truncate max-w-[120px]" title={getChoiceLabel('district', group.district)}>
                                       {getChoiceLabel('district', group.district)}
                                     </td>
@@ -965,7 +1689,8 @@
                     <button onClick={() => setSelectedSubmission(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><Icon.X /></button>
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Icon.User /> ຂໍ້ມູນລາຍບຸກຄົນ</h2>
                     <div className="space-y-3">
-                      <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ລະຫັດ:</span> <strong className="font-sans">{selectedSubmission._101}</strong></p>
+                      <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ຊື່ ແລະ ນາມສະກຸນ:</span> <strong className="font-sans">{selectedSubmission._101}</strong></p>
+                      <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ເພດ:</span> <strong className="font-sans">{getChoiceLabel('gender', selectedSubmission._101_1)}</strong></p>
                       <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ການປະເມີນ:</span> <strong>{selectedSubmission.assessment_time === 'pre' ? 'Pre-test' : 'Post-test'}</strong></p>
                       <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ເມືອງ:</span> <strong>{getChoiceLabel('district', selectedSubmission._104)}</strong></p>
                       <p className="flex justify-between border-b pb-2"><span className="text-gray-500">ບ່ອນເຮັດວຽກ:</span> <strong>{selectedSubmission._105 || '-'}</strong></p>
@@ -981,6 +1706,10 @@
                   </div>
                 </div>
               )}
+
+              {/* === AI CHATBOX COMPONENT === */}
+              <AIChatBox />
+
             </React.Fragment>
           );
         }
