@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ລະບົບປະເມີນຜົນ LMG</title>
     
-    <!-- ໂຫຼດຫ້ອງສະໝຸດຕ່າງໆ -->
+    <!-- ໂຫຼດຫ້ອງສະໝຸດຕ່າງໆທີ່ຈຳເປັນຜ່ານ CDN ທີ່ສະຖຽນ -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7.18.0/babel.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
-    <!-- ໂຫຼດ Firebase -->
+    <!-- ໂຫຼດ Firebase Compat -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -46,6 +46,7 @@
 
         // =========================================================================
         // [ຕັ້ງຄ່າ FIREBASE ຂອງທ່ານຢູ່ບ່ອນນີ້]
+        // ຖ້າຫາກຍັງເປັນ "YOUR_API_KEY", ລະບົບຈະແລ່ນໃນໂໝດ LocalStorage อัตโนมัติ
         // =========================================================================
         const customFirebaseConfig = {
             apiKey: "YOUR_API_KEY",                  
@@ -515,11 +516,22 @@
           const [showResultForm, setShowResultForm] = useState(false); 
           const [recentScore, setRecentScore] = useState(null);
           const [editId, setEditId] = useState(null);
-          const [submissions, setSubmissions] = useState([]);
+          
+          // ລະບົບເກັບຂໍ້ມູນລົງເຄື່ອງ (LocalStorage) ເພື່ອບໍ່ໃຫ້ຂໍ້ມູນຫາຍໄປເວລາ Refresh ໜ້າຈໍຢູ່ GitHub
+          const [submissions, setSubmissions] = useState(() => {
+            const saved = localStorage.getItem('lmg_local_data');
+            if (saved) { try { return JSON.parse(saved); } catch(e) {} }
+            return [];
+          });
+
+          // ບັນທຶກລົງ LocalStorage ອັດຕະໂນມັດທຸກຄັ້ງທີ່ມີການປ່ຽນແປງ ຖ້າບໍ່ໄດ້ໃຊ້ Cloud
+          useEffect(() => {
+            if (!db) localStorage.setItem('lmg_local_data', JSON.stringify(submissions));
+          }, [submissions]);
+
           const [chartFilter, setChartFilter] = useState('all'); 
           const [selectedSubmission, setSelectedSubmission] = useState(null);
           const [showExportDropdown, setShowExportDropdown] = useState(false);
-          const [showImportDropdown, setShowImportDropdown] = useState(false);
           const [showBlankFormDropdown, setShowBlankFormDropdown] = useState(false);
           const maxTotalScore = Object.keys(correctAnswers).length;
 
@@ -527,25 +539,18 @@
             const initAuth = async () => {
               if (!auth) { setUser({ uid: 'demo-user', isAnonymous: true }); return; }
               try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await auth.signInWithCustomToken(auth, __initial_auth_token);
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await auth.signInWithCustomToken(__initial_auth_token);
                 else await auth.signInAnonymously();
               } catch (error) {}
             };
             initAuth();
-            if (auth) { const unsub = auth.onAuthStateChanged(auth, setUser); return () => unsub(); }
+            if (auth) { const unsub = auth.onAuthStateChanged(setUser); return () => unsub(); }
           }, []);
 
           useEffect(() => {
             if (!user || !isAdmin) return;
-            if (!db) {
-              if (submissions.length === 0) {
-                setSubmissions([
-                  { id: 'demo-1', _101: 'John Doe', _101_1: 'm', _102: '2026-06-26', _103: '13', _104: '1314', _105: 'Hospital', assessment_time: 'pre', score: 4, maxScore: 13, timestamp: { toMillis: () => Date.now() - 3600000 } },
-                  { id: 'demo-2', _101: 'John Doe', _101_1: 'm', _102: '2026-06-26', _103: '13', _104: '1314', _105: 'Hospital', assessment_time: 'post', score: 8, maxScore: 13, timestamp: { toMillis: () => Date.now() } }
-                ]);
-              }
-              return;
-            }
+            if (!db) return; // ຖ້າບໍ່ມີ Cloud, ລະບົບຈະດຶງຂໍ້ມູນຈາກ LocalStorage ມາສະແດງເອງຢູ່ແລ້ວ
+            
             const q = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('assessments');
             const unsubscribe = q.onSnapshot((snapshot) => {
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -617,6 +622,7 @@
             };
 
             if (!db) {
+              // ບັນທຶກລົງເຄື່ອງ (LocalStorage) ຖ້າບໍ່ໄດ້ໃຊ້ Cloud
               if (editId) setSubmissions(prev => prev.map(s => s.id === editId ? { ...dataToSave, id: editId } : s));
               else setSubmissions(prev => [...prev, { ...dataToSave, id: 'local-' + Date.now() }]);
               setShowResultForm(true); setIsSubmitting(false);
@@ -657,9 +663,9 @@
           };
 
           const handleExportWord = () => {
-            const html = `<html><head><meta charset="utf-8"></head><body><h2>${t('ລາຍງານ LMG','LMG Report')}</h2><table border="1">
-              <tr><th>${t('ຊື່','Name')}</th><th>${t('ກ່ອນ','Pre')}</th><th>${t('ຫຼັງ','Post')}</th></tr>
-              ${groupedSubmissions.map(g => `<tr><td>${g.code}</td><td>${g.pre?g.pre.score:'-'}</td><td>${g.post?g.post.score:'-'}</td></tr>`).join('')}
+            const html = `<html><head><meta charset="utf-8"></head><body><h2>${t('ລາຍງານ LMG','LMG Report')}</h2><table border="1" style="width:100%;text-align:left;border-collapse:collapse;">
+              <tr><th style="padding:8px">${t('ຊື່','Name')}</th><th style="padding:8px">${t('ກ່ອນ','Pre')}</th><th style="padding:8px">${t('ຫຼັງ','Post')}</th></tr>
+              ${groupedSubmissions.map(g => `<tr><td style="padding:8px">${g.code}</td><td style="padding:8px">${g.pre?g.pre.score:'-'}</td><td style="padding:8px">${g.post?g.post.score:'-'}</td></tr>`).join('')}
             </table></body></html>`;
             const blob = new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `LMG_Report.doc`; a.click();
@@ -703,19 +709,6 @@
             });
             el.innerHTML = html;
             window.html2pdf().set({ margin: 10, filename: `Blank_Form.pdf` }).from(el).save();
-          };
-
-          const handleDownloadTemplate = () => {
-            const hdrs = []; const desc = []; const ex = [];
-            surveyStructure.forEach(sec => sec.questions.forEach(q => {
-              hdrs.push(q.label[lang]);
-              desc.push(q.choices ? choices[q.choices].map(c=>`[${c.name}]=${c.label[lang]}`).join(' | ') : '...');
-              ex.push(q.name==='_101'?'Example Name':(q.choices?choices[q.choices][0].name:'-'));
-            }));
-            const ws = window.XLSX.utils.aoa_to_sheet([hdrs, desc, ex]);
-            const wb = window.XLSX.utils.book_new();
-            window.XLSX.utils.book_append_sheet(wb, ws, "Template");
-            window.XLSX.writeFile(wb, `LMG_Template_${lang}.xlsx`);
           };
 
           const handleImportFile = (e) => {
@@ -762,11 +755,6 @@
 
           return (
             <React.Fragment>
-              <div className="absolute top-4 right-16 md:right-20 z-20 flex bg-white border border-gray-200 p-1 rounded-lg shadow-sm">
-                <button onClick={() => setLang('lo')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3.5 h-3.5 mr-1" /> ລາວ</button>
-                <button onClick={() => setLang('en')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
-              </div>
-
               {!db && <div className="bg-yellow-500 text-white text-center py-2 px-4 text-sm font-bold shadow-md print:hidden flex items-center justify-center gap-2 font-noto"><Icon.AlertCircle className="w-5 h-5 shrink-0" /><span>{t('ໂໝດທົດລອງລະດັບທ້ອງຖິ່ນ (Local Mode)', 'Local Demo Mode')}</span></div>}
 
               {showAdminLogin && (
@@ -790,11 +778,19 @@
               <div className={`font-noto bg-gray-100 ${isAdmin ? 'flex flex-row h-screen w-full' : 'flex flex-col min-h-screen'}`}>
                 <div id="left-pane" className={`${isAdmin ? (isChartFullscreen?'hidden':'w-1/2 h-full overflow-y-auto bg-gray-50 border-r') : 'w-full max-w-3xl mx-auto py-6 sm:py-10 bg-transparent'} transition-all`}>
                   <div className={`p-4 sm:p-6 lg:p-8`}>
+                    
+                    <div className="flex justify-end mb-3 print:hidden">
+                      <div className="flex bg-white border border-gray-200 p-0.5 rounded-lg shadow-sm">
+                        <button onClick={() => setLang('lo')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3.5 h-3.5 mr-1" /> ລາວ</button>
+                        <button onClick={() => setLang('en')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
+                      </div>
+                    </div>
+
                     {!showResultForm ? (
                       <React.Fragment>
                         <div className={`mb-6 p-5 rounded-2xl shadow-sm border text-center relative ${editId?'bg-yellow-50':'bg-white'}`}>
                           {!editId && (
-                            <div className="absolute top-4 left-4 z-10 text-left">
+                            <div className="absolute top-4 left-4 z-10 text-left print:hidden">
                               <button onClick={() => setShowBlankFormDropdown(!showBlankFormDropdown)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg shadow-sm"><Icon.Printer className="w-4 h-4" /> {t('ໂຫຼດແບບຟອມ', 'Print Form')}</button>
                               {showBlankFormDropdown && <div className="fixed inset-0 z-10" onClick={()=>setShowBlankFormDropdown(false)}></div>}
                               {showBlankFormDropdown && (
@@ -805,7 +801,7 @@
                               )}
                             </div>
                           )}
-                          <button onClick={handleAdminToggleClick} className={`absolute top-4 right-4 p-2.5 rounded-full shadow-sm border transition-all z-10 ${isAdmin?'bg-blue-600 text-white border-blue-700':'bg-white text-gray-500 hover:text-blue-600'}`}>
+                          <button onClick={handleAdminToggleClick} className={`absolute top-4 right-4 p-2.5 rounded-full shadow-sm border transition-all z-10 print:hidden ${isAdmin?'bg-blue-600 text-white border-blue-700':'bg-white text-gray-500 hover:text-blue-600'}`}>
                             {isAdmin ? <Icon.Unlock className="w-5 h-5"/> : <Icon.Lock className="w-5 h-5"/>}
                           </button>
                           <h1 className="text-xl md:text-2xl font-bold text-gray-800 mt-2">{editId ? t('ແກ້ໄຂຂໍ້ມູນ', 'Edit Mode') : t('ບົດທົດສອບ ກ່ອນ-ຫຼັງ LMG', 'LMG Pre-Post Assessment')}</h1>
@@ -831,7 +827,7 @@
                           ))}
                         </div>
 
-                        <div className="mt-6 space-y-3">
+                        <div className="mt-6 space-y-3 print:hidden">
                           {submitErrorMsg && <div className="p-4 bg-red-50 text-red-700 text-sm rounded-lg text-center">{submitErrorMsg}</div>}
                           <button onClick={handleSubmit} disabled={isSubmitting} className={`w-full py-4 text-white font-bold rounded-xl shadow-lg flex justify-center items-center ${isSubmitting?'bg-gray-400':(editId?'bg-yellow-500':'bg-blue-600 hover:bg-blue-700')}`}>
                             {isSubmitting ? t('ກຳລັງບັນທຶກ...', 'Saving...') : (editId ? t('ອັບເດດ', 'Update') : t('ສົ່ງຂໍ້ມູນ', 'Submit'))}
@@ -853,17 +849,22 @@
                 {isAdmin && (
                   <div className={`${isChartFullscreen ? 'w-full' : 'w-1/2'} h-full overflow-y-auto bg-white z-10 shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)]`}>
                     <div className={`p-4 sm:p-6 lg:p-8 ${isChartFullscreen?'max-w-7xl mx-auto':'min-w-[400px]'}`}>
-                      <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold flex items-center"><Icon.Database className="w-6 h-6 mr-2 text-blue-600"/> {t('ຂໍ້ມູນ', 'Data')}</h2>
-                        <div className="flex gap-3">
-                          <button onClick={()=>setShowNewFormModal(true)} className="px-4 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">{t('ສ້າງແອັບໃໝ່', 'New App')}</button>
+                      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
+                        <div className="flex items-center gap-4">
+                          <h2 className="text-xl font-bold flex items-center"><Icon.Database className="w-6 h-6 mr-2 text-blue-600"/> {t('ຂໍ້ມູນ', 'Data')}</h2>
+                          <div className="flex bg-white border border-gray-200 p-0.5 rounded-lg shadow-sm print:hidden">
+                            <button onClick={() => setLang('lo')} className={`flex items-center px-2 py-1 text-[11px] font-bold rounded-md transition-colors ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3 h-3 mr-1" /> ລາວ</button>
+                            <button onClick={() => setLang('en')} className={`flex items-center px-2 py-1 text-[11px] font-bold rounded-md transition-colors ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 md:gap-3">
                           <div className="flex bg-white border p-1 rounded-lg">
                             <button onClick={()=>setChartFilter('all')} className={`px-4 py-1.5 text-xs font-bold rounded-md ${chartFilter==='all'?'bg-blue-600 text-white':''}`}>{t('ທັງໝົດ', 'All')}</button>
                             <button onClick={()=>setChartFilter('pre')} className={`px-4 py-1.5 text-xs font-bold rounded-md ${chartFilter==='pre'?'bg-[#35675D] text-white':'text-[#35675D]'}`}>{t('ກ່ອນ', 'Pre')}</button>
                             <button onClick={()=>setChartFilter('post')} className={`px-4 py-1.5 text-xs font-bold rounded-md ${chartFilter==='post'?'bg-[#BF5A38] text-white':'text-[#BF5A38]'}`}>{t('ຫຼັງ', 'Post')}</button>
                           </div>
                           <div className="relative">
-                            <input type="file" id="fileImport" className="hidden" accept=".xlsx,.csv" onChange={e=>{handleImportFile(e);setShowImportDropdown(false)}}/>
+                            <input type="file" id="fileImport" className="hidden" accept=".xlsx,.csv" onChange={e=>handleImportFile(e)}/>
                             <button onClick={()=>document.getElementById('fileImport').click()} className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border rounded-lg flex items-center gap-1"><Icon.Upload className="w-3.5 h-3.5" /> {t('ນຳເຂົ້າ', 'Import')}</button>
                           </div>
                           <div className="relative">
@@ -882,16 +883,16 @@
                       </div>
 
                       <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div className="p-4 rounded-xl border bg-[#35675D]/10"><p className="text-sm font-bold text-[#35675D]">{t('ກ່ອນການປະເມີນ', 'Pre-test')}</p><p className="text-2xl font-bold text-[#35675D]">{submissions.filter(s=>s.assessment_time==='pre').length}</p></div>
-                        <div className="p-4 rounded-xl border bg-[#BF5A38]/10"><p className="text-sm font-bold text-[#BF5A38]">{t('ຫຼັງການປະເມີນ', 'Post-test')}</p><p className="text-2xl font-bold text-[#BF5A38]">{submissions.filter(s=>s.assessment_time==='post').length}</p></div>
+                        <div className="p-4 rounded-xl border bg-[#35675D]/10"><p className="text-sm font-bold text-[#35675D]">{t('ກ່ອນ', 'Pre-test')}</p><p className="text-2xl font-bold text-[#35675D]">{submissions.filter(s=>s.assessment_time==='pre').length}</p></div>
+                        <div className="p-4 rounded-xl border bg-[#BF5A38]/10"><p className="text-sm font-bold text-[#BF5A38]">{t('ຫຼັງ', 'Post-test')}</p><p className="text-2xl font-bold text-[#BF5A38]">{submissions.filter(s=>s.assessment_time==='post').length}</p></div>
                       </div>
 
                       <div className="bg-white border rounded-2xl p-4 mb-8">
                         <h3 className="text-sm font-bold mb-4">{t('ຄະແນນລວມ', 'Scores')}</h3>
                         <ColumnChart data={filteredChartData} maxScore={maxTotalScore} isFullscreen={isChartFullscreen} lang={lang} />
                         <div className="flex justify-center gap-6 mt-6">
-                          <div className="flex items-center text-xs text-gray-600"><span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#35675D' }}></span> {t('ກ່ອນການປະເມີນ', 'Pre-test')}</div>
-                          <div className="flex items-center text-xs text-gray-600"><span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#BF5A38' }}></span> {t('ຫຼັງການປະເມີນ', 'Post-test')}</div>
+                          <div className="flex items-center text-xs text-gray-600"><span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#35675D' }}></span> {t('ກ່ອນ', 'Pre')}</div>
+                          <div className="flex items-center text-xs text-gray-600"><span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: '#BF5A38' }}></span> {t('ຫຼັງ', 'Post')}</div>
                         </div>
                       </div>
 
