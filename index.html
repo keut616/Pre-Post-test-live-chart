@@ -215,6 +215,21 @@
             { name: 'a', label: { lo: 'A. ຂຽນບົດລາຍງານ', en: 'A. Writing a report' } },
             { name: 'b', label: { lo: 'B. ກ່ອງຮັບຄໍາຄິດເຫັນ', en: 'B. Suggestion box' } },
             { name: 'c', label: { lo: 'C. ຈັດກອງປະຊຸມກັບພະນັກງານ', en: 'C. Holding a meeting with staff' } }
+          ],
+          strat1_opts: [
+            { name: 'a', label: { lo: '3', en: '3' } },
+            { name: 'b', label: { lo: '5', en: '5' } },
+            { name: 'c', label: { lo: '7', en: '7' } }
+          ],
+          strat2_opts: [
+            { name: 'a', label: { lo: '2', en: '2' } },
+            { name: 'b', label: { lo: '4', en: '4' } },
+            { name: 'c', label: { lo: '6', en: '6' } }
+          ],
+          strat3_opts: [
+            { name: 'a', label: { lo: '3', en: '3' } },
+            { name: 'b', label: { lo: '5', en: '5' } },
+            { name: 'c', label: { lo: '7', en: '7' } }
           ]
         };
 
@@ -222,7 +237,8 @@
           focus1: 'b', focus2: 'd', focus3: 'a',
           align1: 'b', align2: 'd', align3: 'a',
           inspire1: 'b', inspire2: 'c', inspire3: 'a',
-          gov1: 'b'
+          gov1: 'b',
+          strat1: 'b', strat2: 'a', strat3: 'b'
         };
 
         const surveyStructure = [
@@ -276,6 +292,16 @@
             icon: <Icon.ShieldCheck className="w-5 h-5 text-orange-500" />,
             questions: [
               { name: 'gov1', type: 'select_one', label: { lo: '10. ອັນໃດເປັນວິທີການເກັບກຳຄໍາຄິດເຫັນຈາກລູກຄ້າ?', en: '10. What is a method to collect feedback from clients?' }, choices: 'gov1', required: true }
+            ]
+          },
+          {
+            id: 'strategy',
+            title: { lo: 'VI. ຍຸດທະສາດ ແລະ ການວາງແຜນ', en: 'VI. Strategy & Planning' },
+            icon: <Icon.ClipboardList className="w-5 h-5 text-teal-600" />,
+            questions: [
+              { name: 'strat1', type: 'select_one', label: { lo: '11. ຫຼັກການໃນການໃຫ້ການຮັບຕ້ອນທີ່ດີ ມີຈັກຢ່າງ?', en: '11. How many principles of good reception are there?' }, choices: 'strat1_opts', required: true },
+              { name: 'strat2', type: 'select_one', label: { lo: '12. ອົງປະກອບຂອງການຂຽນຜົນປະໂຫຍດຂອງແຜນກິດຈະກຳມີຈັກຢ່າງ?', en: '12. How many components are there in writing the benefits of an activity plan?' }, choices: 'strat2_opts', required: true },
+              { name: 'strat3', type: 'select_one', label: { lo: '13. ເອກະສານປະກອບໃສ່ໃນບົດສະຫຼຸບ ໃນແຜນກິດຈະກຳພາກ 63 ມີຈັກເອກະສານ?', en: '13. How many attached documents are in the summary report of activity plan section 63?' }, choices: 'strat3_opts', required: true }
             ]
           }
         ];
@@ -616,9 +642,9 @@
               [t('ແຂວງ', 'Province')]: g.pre ? getChoiceLabel('province', g.pre._103) : (g.post ? getChoiceLabel('province', g.post._103) : '-'),
               [t('ເມືອງ', 'District')]: getChoiceLabel('district', g.district),
               [t('ບ່ອນເຮັດວຽກ', 'Workplace')]: g.workplace || '-',
-              [t('ຄະແນນກ່ອນ (Pre)', 'Pre Score')]: g.pre ? `${g.pre.score}/10` : '-',
+              [t('ຄະແນນກ່ອນ (Pre)', 'Pre Score')]: g.pre ? `${g.pre.score}/${maxTotalScore}` : '-',
               [t('ວັນທີ (Pre)', 'Pre Date')]: g.pre ? g.pre._102 : '-',
-              [t('ຄະແນນຫຼັງ (Post)', 'Post Score')]: g.post ? `${g.post.score}/10` : '-',
+              [t('ຄະແນນຫຼັງ (Post)', 'Post Score')]: g.post ? `${g.post.score}/${maxTotalScore}` : '-',
               [t('ວັນທີ (Post)', 'Post Date')]: g.post ? g.post._102 : '-'
             }));
           };
