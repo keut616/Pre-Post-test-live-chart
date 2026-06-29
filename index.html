@@ -736,11 +736,6 @@
 
           return (
             <React.Fragment>
-              <div className="absolute top-4 right-16 md:right-20 z-20 flex bg-white border border-gray-200 p-1 rounded-lg shadow-sm">
-                <button onClick={() => setLang('lo')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3.5 h-3.5 mr-1" /> ລາວ</button>
-                <button onClick={() => setLang('en')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
-              </div>
-
               {!db && <div className="bg-yellow-500 text-white text-center py-2 px-4 text-sm font-bold shadow-md print:hidden flex items-center justify-center gap-2 font-noto"><Icon.AlertCircle className="w-5 h-5 shrink-0" /><span>{t('ໂໝດທົດລອງລະດັບທ້ອງຖິ່ນ (Local Mode)', 'Local Demo Mode')}</span></div>}
 
               {showAdminLogin && (
@@ -764,6 +759,15 @@
               <div className={`font-noto bg-gray-100 ${isAdmin ? 'flex flex-row h-screen w-full' : 'flex flex-col min-h-screen'}`}>
                 <div id="left-pane" className={`${isAdmin ? (isChartFullscreen?'hidden':'w-1/2 h-full overflow-y-auto bg-gray-50 border-r') : 'w-full max-w-3xl mx-auto py-6 sm:py-10 bg-transparent'} transition-all`}>
                   <div className={`p-4 sm:p-6 lg:p-8`}>
+                    
+                    {/* ປຸ່ມປ່ຽນພາສາສຳລັບໜ້າຟອມ (ຍ້າຍມາໄວ້ບ່ອນນີ້ເພື່ອບໍ່ໃຫ້ບັງປຸ່ມອື່ນ) */}
+                    <div className="flex justify-end mb-3 print:hidden">
+                      <div className="flex bg-white border border-gray-200 p-0.5 rounded-lg shadow-sm">
+                        <button onClick={() => setLang('lo')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3.5 h-3.5 mr-1" /> ລາວ</button>
+                        <button onClick={() => setLang('en')} className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
+                      </div>
+                    </div>
+
                     {!showResultForm ? (
                       <React.Fragment>
                         <div className={`mb-6 p-5 rounded-2xl shadow-sm border text-center relative ${editId?'bg-yellow-50':'bg-white'}`}>
@@ -827,9 +831,17 @@
                 {isAdmin && (
                   <div className={`${isChartFullscreen ? 'w-full' : 'w-1/2'} h-full overflow-y-auto bg-white z-10 shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)]`}>
                     <div className={`p-4 sm:p-6 lg:p-8 ${isChartFullscreen?'max-w-7xl mx-auto':'min-w-[400px]'}`}>
-                      <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold flex items-center"><Icon.Database className="w-6 h-6 mr-2 text-blue-600"/> {t('ຂໍ້ມູນ', 'Data')}</h2>
-                        <div className="flex gap-3">
+                      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
+                        <div className="flex items-center gap-4">
+                          <h2 className="text-xl font-bold flex items-center"><Icon.Database className="w-6 h-6 mr-2 text-blue-600"/> {t('ຂໍ້ມູນ', 'Data')}</h2>
+                          
+                          {/* ປຸ່ມປ່ຽນພາສາສຳລັບໜ້າ Admin (ຍ້າຍມາໄວ້ຂ້າງຂໍ້ຄວາມ ຂໍ້ມູນ) */}
+                          <div className="flex bg-white border border-gray-200 p-0.5 rounded-lg shadow-sm print:hidden">
+                            <button onClick={() => setLang('lo')} className={`flex items-center px-2 py-1 text-[11px] font-bold rounded-md transition-colors ${lang==='lo'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon.Globe className="w-3 h-3 mr-1" /> ລາວ</button>
+                            <button onClick={() => setLang('en')} className={`flex items-center px-2 py-1 text-[11px] font-bold rounded-md transition-colors ${lang==='en'?'bg-blue-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>EN</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 md:gap-3">
                           <button onClick={()=>setShowNewFormModal(true)} className="px-4 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">{t('ສ້າງແອັບໃໝ່', 'New App')}</button>
                           <div className="flex bg-white border p-1 rounded-lg">
                             <button onClick={()=>setChartFilter('all')} className={`px-4 py-1.5 text-xs font-bold rounded-md ${chartFilter==='all'?'bg-blue-600 text-white':''}`}>{t('ທັງໝົດ', 'All')}</button>
@@ -837,15 +849,8 @@
                             <button onClick={()=>setChartFilter('post')} className={`px-4 py-1.5 text-xs font-bold rounded-md ${chartFilter==='post'?'bg-[#BF5A38] text-white':'text-[#BF5A38]'}`}>Post</button>
                           </div>
                           <div className="relative">
-                            <button onClick={()=>setShowImportDropdown(!showImportDropdown)} className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border rounded-lg flex items-center gap-1"><Icon.Upload className="w-3.5 h-3.5" /> {t('ນຳເຂົ້າ', 'Import')}</button>
-                            <input type="file" id="fileImport" className="hidden" accept=".xlsx,.csv" onChange={e=>{handleImportFile(e);setShowImportDropdown(false)}}/>
-                            {showImportDropdown && <div className="fixed inset-0" onClick={()=>setShowImportDropdown(false)}></div>}
-                            {showImportDropdown && (
-                              <div className="absolute right-0 mt-1 w-48 bg-white border shadow-lg rounded-lg z-20 py-2">
-                                <button onClick={()=>{handleDownloadTemplate();setShowImportDropdown(false)}} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50">{t('1. ໂຫຼດແມ່ແບບ', '1. Template')}</button>
-                                <button onClick={()=>{document.getElementById('fileImport').click()}} className="w-full text-left px-4 py-2 text-xs font-bold text-blue-600 hover:bg-gray-50">{t('2. ອັບໂຫຼດໄຟລ໌', '2. Upload')}</button>
-                              </div>
-                            )}
+                            <input type="file" id="fileImport" className="hidden" accept=".xlsx,.csv" onChange={e=>handleImportFile(e)}/>
+                            <button onClick={()=>document.getElementById('fileImport').click()} className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border rounded-lg flex items-center gap-1"><Icon.Upload className="w-3.5 h-3.5" /> {t('ນຳເຂົ້າ', 'Import')}</button>
                           </div>
                           <div className="relative">
                             <button onClick={()=>setShowExportDropdown(!showExportDropdown)} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border rounded-lg flex items-center gap-1"><Icon.Download className="w-3.5 h-3.5 text-emerald-600" /> {t('ສົ່ງອອກ', 'Export')}</button>
